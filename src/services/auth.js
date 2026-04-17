@@ -1,9 +1,7 @@
 import {
   GoogleAuthProvider,
-  getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
 } from 'firebase/auth'
 import { auth, firebaseConfigError } from '../lib/firebase'
@@ -26,17 +24,6 @@ function ensureAuth() {
   }
 }
 
-function prefersRedirect() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches
-  const narrowViewport = window.matchMedia?.('(max-width: 768px)')?.matches
-
-  return Boolean(coarsePointer || narrowViewport)
-}
-
 export function isUserAllowed(user) {
   if (!user?.email || !user.emailVerified) {
     return false
@@ -57,17 +44,7 @@ export function observeAuthState(callback) {
 export async function signIn() {
   ensureAuth()
 
-  if (prefersRedirect()) {
-    await signInWithRedirect(auth, provider)
-    return null
-  }
-
   return signInWithPopup(auth, provider)
-}
-
-export async function completeRedirectSignIn() {
-  ensureAuth()
-  return getRedirectResult(auth)
 }
 
 export async function signOutUser() {

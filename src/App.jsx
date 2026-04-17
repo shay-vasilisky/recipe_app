@@ -4,7 +4,6 @@ import RecipeList from './components/RecipeList'
 import { firebaseConfigError } from './lib/firebase'
 import {
   allowedEmailConfigError,
-  completeRedirectSignIn,
   isUserAllowed,
   observeAuthState,
   signIn,
@@ -71,12 +70,6 @@ export default function App() {
     }
 
     let cancelled = false
-
-    completeRedirectSignIn().catch((error) => {
-      if (!cancelled) {
-        setAuthMessage(error.message || 'Google sign-in failed.')
-      }
-    })
 
     const unsubscribe = observeAuthState(async (nextUser) => {
       if (cancelled) {
@@ -147,6 +140,21 @@ export default function App() {
     try {
       await signIn()
     } catch (error) {
+      if (error.code === 'auth/popup-blocked') {
+        setAuthMessage('The browser blocked the Google sign-in popup. Allow popups for this site and try again.')
+        return
+      }
+
+      if (error.code === 'auth/cancelled-popup-request') {
+        setAuthMessage('Another sign-in window is already open. Finish it or close it, then try again.')
+        return
+      }
+
+      if (error.code === 'auth/popup-closed-by-user') {
+        setAuthMessage('The Google sign-in window was closed before sign-in finished.')
+        return
+      }
+
       setAuthMessage(error.message || 'Unable to start Google sign-in.')
     }
   }

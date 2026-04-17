@@ -18,6 +18,8 @@ A small shared recipe web app built with React, Vite, Firebase Auth, Firestore, 
 4. Install dependencies with `npm install`.
 5. Start the app with `npm run dev`.
 
+If you see `Missing Firebase config: ...` in the browser locally, your `.env.local` file is missing or incomplete.
+
 ## Firebase setup
 
 ### Authentication
@@ -26,6 +28,7 @@ A small shared recipe web app built with React, Vite, Firebase Auth, Firestore, 
 2. Enable `Authentication` and turn on the Google provider.
 3. Add your production GitHub Pages domain to Firebase Auth authorized domains.
    Example: `your-user.github.io`
+4. This app uses Google popup sign-in. If sign-in appears to do nothing on a device, allow popups for the site and try again.
 
 ### Firestore
 
@@ -54,6 +57,8 @@ Before pushing to GitHub:
 4. If the first workflow run already failed before Pages was enabled, re-run the workflow after changing the Pages source.
 
 The workflow builds with `BASE_PATH=/<repo-name>/`, so it works for a standard project Pages URL.
+
+If you see `Missing Firebase config: ...` on the deployed site, the GitHub repository secrets are missing or empty. Add the secrets, then re-run the Pages workflow.
 
 ## Important note about Firebase config
 
