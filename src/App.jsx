@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import RecipeForm from './components/RecipeForm'
 import RecipeList from './components/RecipeList'
 import { firebaseConfigError } from './lib/firebase'
+import { appendSearchTerm, matchesRecipeSearch, normalizeUserEmail } from './lib/recipe-utils'
 import {
   allowedEmailConfigError,
   isUserAllowed,
@@ -14,6 +15,7 @@ import {
   deleteRecipe,
   subscribeToRecipes,
   updateRecipe,
+  updateRecipeRating,
 } from './services/recipes'
 
 function SetupNotice({ title, body }) {
@@ -57,10 +59,13 @@ export default function App() {
   const [recipesLoading, setRecipesLoading] = useState(true)
   const [recipesError, setRecipesError] = useState('')
   const [editingRecipe, setEditingRecipe] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [ratingRecipeId, setRatingRecipeId] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
   const setupError = firebaseConfigError || allowedEmailConfigError
   const canSignIn = !setupError
+  const currentUserEmail = normalizeUserEmail(user?.email)
 
   useEffect(() => {
     if (firebaseConfigError) {
@@ -90,6 +95,8 @@ export default function App() {
         setRecipes([])
         setRecipesLoading(false)
         setEditingRecipe(null)
+        setSearchQuery('')
+        setRatingRecipeId(null)
       }
     })
 
@@ -129,9 +136,15 @@ export default function App() {
             description: editingRecipe.description || '',
             sourceUrl: editingRecipe.sourceUrl || '',
             imageUrl: editingRecipe.imageUrl || '',
+            tags: editingRecipe.tags || [],
           }
         : undefined,
     [editingRecipe],
+  )
+
+  const filteredRecipes = useMemo(
+    () => recipes.filter((recipe) => matchesRecipeSearch(recipe, searchQuery)),
+    [recipes, searchQuery],
   )
 
   async function handleSignIn() {
@@ -224,6 +237,35 @@ export default function App() {
     }
   }
 
+  async function handleRateRecipe(recipe, rating) {
+    if (!currentUserEmail) {
+      return
+    }
+
+    setRatingRecipeId(recipe.id)
+    setRecipesError('')
+
+    try {
+      await updateRecipeRating(recipe.id, currentUserEmail, rating)
+    } catch (error) {
+      setRecipesError(error.message || 'Unable to save rating.')
+    } finally {
+      setRatingRecipeId((currentRecipeId) => (currentRecipeId === recipe.id ? null : currentRecipeId))
+    }
+  }
+
+  function handleSearchChange(event) {
+    setSearchQuery(event.target.value)
+  }
+
+  function clearSearch() {
+    setSearchQuery('')
+  }
+
+  function handleTagSearch(tag) {
+    setSearchQuery((currentQuery) => appendSearchTerm(currentQuery, tag))
+  }
+
   function openRecipe(url) {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
@@ -278,11 +320,19 @@ export default function App() {
         <div className="layout__main">
           {recipesError ? <p className="inline-error">{recipesError}</p> : null}
           <RecipeList
+            currentUserEmail={currentUserEmail}
             loading={recipesLoading}
             onDelete={handleDeleteRecipe}
             onEdit={setEditingRecipe}
             onOpen={openRecipe}
-            recipes={recipes}
+            onRate={handleRateRecipe}
+            onSearchChange={handleSearchChange}
+            onSearchClear={clearSearch}
+            onTagClick={handleTagSearch}
+            ratingRecipeId={ratingRecipeId}
+            recipes={filteredRecipes}
+            searchQuery={searchQuery}
+            totalRecipesCount={recipes.length}
           />
         </div>
 

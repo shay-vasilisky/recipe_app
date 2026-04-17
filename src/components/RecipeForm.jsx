@@ -1,10 +1,22 @@
 import { useEffect, useState } from 'react'
+import { normalizeTags } from '../lib/recipe-utils'
 
 const emptyForm = {
   title: '',
   description: '',
   sourceUrl: '',
   imageUrl: '',
+  tags: [],
+}
+
+function getFormValues(initialValues = emptyForm) {
+  return {
+    title: initialValues.title || '',
+    description: initialValues.description || '',
+    sourceUrl: initialValues.sourceUrl || '',
+    imageUrl: initialValues.imageUrl || '',
+    tags: Array.isArray(initialValues.tags) ? initialValues.tags : [],
+  }
 }
 
 export default function RecipeForm({
@@ -14,11 +26,13 @@ export default function RecipeForm({
   onCancel,
   submitting,
 }) {
-  const [values, setValues] = useState(initialValues)
+  const [values, setValues] = useState(() => getFormValues(initialValues))
+  const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    setValues(initialValues)
+    setValues(getFormValues(initialValues))
+    setTagInput('')
     setError('')
   }, [initialValues])
 
@@ -27,6 +41,28 @@ export default function RecipeForm({
     setValues((current) => ({
       ...current,
       [name]: value,
+    }))
+  }
+
+  function commitTagInput() {
+    const nextTags = normalizeTags(tagInput.split(','))
+
+    if (!nextTags.length) {
+      setTagInput('')
+      return
+    }
+
+    setValues((current) => ({
+      ...current,
+      tags: normalizeTags([...current.tags, ...nextTags]),
+    }))
+    setTagInput('')
+  }
+
+  function removeTag(tagToRemove) {
+    setValues((current) => ({
+      ...current,
+      tags: current.tags.filter((tag) => tag !== tagToRemove),
     }))
   }
 
@@ -40,10 +76,14 @@ export default function RecipeForm({
     }
 
     try {
-      await onSubmit(values)
+      await onSubmit({
+        ...values,
+        tags: normalizeTags([...values.tags, ...tagInput.split(',')]),
+      })
 
       if (mode === 'add') {
         setValues(emptyForm)
+        setTagInput('')
       }
     } catch (submitError) {
       setError(submitError.message || 'Unable to save recipe.')
@@ -111,6 +151,51 @@ export default function RecipeForm({
             value={values.imageUrl}
           />
         </label>
+
+        <div className="field">
+          <label htmlFor="recipe-tags">
+            <span>Tags</span>
+          </label>
+          <div className="tag-editor">
+            {values.tags.length ? (
+              <div className="tag-editor__list">
+                {values.tags.map((tag) => (
+                  <button
+                    className="tag-chip tag-chip--editable"
+                    key={tag}
+                    onClick={() => removeTag(tag)}
+                    type="button"
+                  >
+                    <span>{tag}</span>
+                    <span aria-hidden="true">x</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="tag-editor__controls">
+              <input
+                autoComplete="off"
+                id="recipe-tags"
+                onBlur={commitTagInput}
+                onChange={(event) => setTagInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ',') {
+                    event.preventDefault()
+                    commitTagInput()
+                  }
+                }}
+                placeholder="vegetarian, quick dinner"
+                type="text"
+                value={tagInput}
+              />
+              <button className="ghost-button" onClick={commitTagInput} type="button">
+                Add tag
+              </button>
+            </div>
+          </div>
+          <p className="field__hint">Press Enter or comma to add a tag. Click a tag to remove it.</p>
+        </div>
 
         {error ? <p className="inline-error">{error}</p> : null}
 
