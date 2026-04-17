@@ -50,7 +50,8 @@ Before pushing to GitHub:
    - `VITE_FIREBASE_MESSAGING_SENDER_ID`
    - `VITE_FIREBASE_APP_ID`
    - `VITE_ALLOWED_EMAILS`
-3. In GitHub Pages settings, set the source to `GitHub Actions`.
+3. In GitHub Pages settings, set the source to `GitHub Actions` before the first workflow run.
+4. If the first workflow run already failed before Pages was enabled, re-run the workflow after changing the Pages source.
 
 The workflow builds with `BASE_PATH=/<repo-name>/`, so it works for a standard project Pages URL.
 
