@@ -1,5 +1,33 @@
+export const MEAL_TYPE_OPTIONS = [
+  { value: '', label: 'Any meal' },
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'lunch', label: 'Lunch' },
+  { value: 'dinner', label: 'Dinner' },
+  { value: 'dessert', label: 'Dessert' },
+  { value: 'snack', label: 'Snack' },
+  { value: 'drink', label: 'Drink' },
+  { value: 'other', label: 'Other' },
+]
+
+const allowedMealTypes = new Set(MEAL_TYPE_OPTIONS.map((option) => option.value))
+
 export function normalizeUserEmail(email = '') {
   return String(email).trim().toLowerCase()
+}
+
+export function normalizeTextInput(value = '') {
+  return String(value).trim().replace(/\s+/g, ' ')
+}
+
+export function normalizeSearchText(value = '') {
+  return normalizeTextInput(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function normalizeTagValue(tag = '') {
+  return normalizeSearchText(tag)
 }
 
 export function normalizeTags(tags) {
@@ -7,16 +35,53 @@ export function normalizeTags(tags) {
   const seen = new Set()
 
   return source.reduce((normalizedTags, tag) => {
-    const normalizedTag = String(tag).trim().toLowerCase()
+    const displayTag = normalizeTextInput(tag)
+    const normalizedTag = normalizeTagValue(displayTag)
 
     if (!normalizedTag || seen.has(normalizedTag)) {
       return normalizedTags
     }
 
     seen.add(normalizedTag)
-    normalizedTags.push(normalizedTag)
+    normalizedTags.push(displayTag)
     return normalizedTags
   }, [])
+}
+
+export function normalizeTagIds(tagIds) {
+  const source = Array.isArray(tagIds) ? tagIds : []
+  const seen = new Set()
+
+  return source.reduce((normalizedTagIds, tagId) => {
+    const value = String(tagId || '').trim()
+
+    if (!value || seen.has(value)) {
+      return normalizedTagIds
+    }
+
+    seen.add(value)
+    normalizedTagIds.push(value)
+    return normalizedTagIds
+  }, [])
+}
+
+export function normalizeMealType(value = '') {
+  const normalizedValue = normalizeSearchText(value)
+  return allowedMealTypes.has(normalizedValue) ? normalizedValue : ''
+}
+
+export function normalizeTotalTimeMinutes(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const totalTimeMinutes = Number.parseInt(value, 10)
+
+  if (!Number.isInteger(totalTimeMinutes) || totalTimeMinutes <= 0) {
+    return null
+  }
+
+  return totalTimeMinutes
 }
 
 export function normalizeRating(value) {
@@ -50,51 +115,37 @@ export function normalizeRatings(ratings) {
 export function normalizeRecipe(recipe = {}) {
   return {
     ...recipe,
+    title: normalizeTextInput(recipe.title),
+    description: normalizeTextInput(recipe.description),
+    sourceUrl: normalizeTextInput(recipe.sourceUrl),
+    imageUrl: normalizeTextInput(recipe.imageUrl),
+    createdBy: normalizeTextInput(recipe.createdBy),
     tags: normalizeTags(recipe.tags),
+    tagIds: normalizeTagIds(recipe.tagIds),
+    mealType: normalizeMealType(recipe.mealType),
+    cuisine: normalizeTextInput(recipe.cuisine),
+    totalTimeMinutes: normalizeTotalTimeMinutes(recipe.totalTimeMinutes),
     ratings: normalizeRatings(recipe.ratings),
   }
 }
 
-export function getRecipeSearchTerms(query = '') {
-  return String(query)
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
+export function getRecipeSourceHost(url = '') {
+  try {
+    const parsedUrl = new URL(url)
+    return parsedUrl.hostname.replace(/^www\./i, '') || 'Recipe link'
+  } catch {
+    return 'Recipe link'
+  }
 }
 
-export function matchesRecipeSearch(recipe, query) {
-  const searchTerms = Array.isArray(query) ? query : getRecipeSearchTerms(query)
+export function getContentTextProps(text = '') {
+  const value = String(text).trim()
+  const hasHebrewCharacters = /[\u0590-\u05FF]/.test(value)
 
-  if (!searchTerms.length) {
-    return true
+  return {
+    dir: 'auto',
+    lang: value ? (hasHebrewCharacters ? 'he' : 'en') : undefined,
   }
-
-  const searchableFields = [
-    recipe.title,
-    recipe.description,
-    recipe.sourceUrl,
-    recipe.createdBy,
-    ...normalizeTags(recipe.tags),
-  ].map((value) => String(value || '').toLowerCase())
-
-  return searchTerms.every((term) => searchableFields.some((field) => field.includes(term)))
-}
-
-export function appendSearchTerm(currentQuery, term) {
-  const nextTerm = String(term).trim().toLowerCase()
-
-  if (!nextTerm) {
-    return String(currentQuery || '')
-  }
-
-  const currentTerms = getRecipeSearchTerms(currentQuery)
-
-  if (currentTerms.includes(nextTerm)) {
-    return currentTerms.join(' ')
-  }
-
-  return [...currentTerms, nextTerm].join(' ')
 }
 
 export function getRecipeRatingSummary(recipe, userEmail) {

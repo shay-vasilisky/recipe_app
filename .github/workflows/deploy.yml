@@ -20,6 +20,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: github-pages
     env:
       BASE_PATH: /${{ github.event.repository.name }}/
       VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
@@ -38,6 +39,29 @@ jobs:
         with:
           node-version: 20
           cache: npm
+
+      - name: Validate required Firebase env
+        run: |
+          missing=0
+          for name in \
+            VITE_FIREBASE_API_KEY \
+            VITE_FIREBASE_AUTH_DOMAIN \
+            VITE_FIREBASE_PROJECT_ID \
+            VITE_FIREBASE_STORAGE_BUCKET \
+            VITE_FIREBASE_MESSAGING_SENDER_ID \
+            VITE_FIREBASE_APP_ID \
+            VITE_ALLOWED_EMAILS
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error title=Missing env::$name is not set"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "One or more required GitHub Actions secrets are missing."
+            exit 1
+          fi
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

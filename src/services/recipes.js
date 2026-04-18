@@ -12,9 +12,12 @@ import {
 } from 'firebase/firestore'
 import { db, firebaseConfigError } from '../lib/firebase'
 import {
+  normalizeMealType,
   normalizeRating,
   normalizeRecipe,
-  normalizeTags,
+  normalizeTagIds,
+  normalizeTextInput,
+  normalizeTotalTimeMinutes,
   normalizeUserEmail,
 } from '../lib/recipe-utils'
 
@@ -28,11 +31,14 @@ const recipesCollection = () => collection(db, 'recipes')
 
 function buildRecipePayload(recipe) {
   return {
-    title: recipe.title.trim(),
-    description: recipe.description.trim(),
-    sourceUrl: recipe.sourceUrl.trim(),
-    imageUrl: recipe.imageUrl.trim(),
-    tags: normalizeTags(recipe.tags),
+    title: normalizeTextInput(recipe.title),
+    description: normalizeTextInput(recipe.description),
+    sourceUrl: normalizeTextInput(recipe.sourceUrl),
+    imageUrl: normalizeTextInput(recipe.imageUrl),
+    tagIds: normalizeTagIds(recipe.tagIds),
+    mealType: normalizeMealType(recipe.mealType),
+    cuisine: normalizeTextInput(recipe.cuisine),
+    totalTimeMinutes: normalizeTotalTimeMinutes(recipe.totalTimeMinutes),
   }
 }
 

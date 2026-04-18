@@ -13,5 +13,9 @@ service cloud.firestore {
     match /recipes/{recipeId} {
       allow read, write: if isAllowedEmail();
     }
+
+    match /tags/{tagId} {
+      allow read, write: if isAllowedEmail();
+    }
   }
 }

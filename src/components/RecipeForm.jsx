@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
-import { normalizeTags } from '../lib/recipe-utils'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import ManagedTagAutocomplete from './ManagedTagAutocomplete'
+import { MEAL_TYPE_OPTIONS } from '../lib/recipe-utils'
 
 const emptyForm = {
   title: '',
   description: '',
   sourceUrl: '',
   imageUrl: '',
-  tags: [],
+  tagIds: [],
+  mealType: '',
+  cuisine: '',
+  totalTimeMinutes: '',
 }
 
 function getFormValues(initialValues = emptyForm) {
@@ -15,11 +19,28 @@ function getFormValues(initialValues = emptyForm) {
     description: initialValues.description || '',
     sourceUrl: initialValues.sourceUrl || '',
     imageUrl: initialValues.imageUrl || '',
-    tags: Array.isArray(initialValues.tags) ? initialValues.tags : [],
+    tagIds: Array.isArray(initialValues.tagIds) ? initialValues.tagIds : [],
+    mealType: initialValues.mealType || '',
+    cuisine: initialValues.cuisine || '',
+    totalTimeMinutes:
+      initialValues.totalTimeMinutes === null || initialValues.totalTimeMinutes === undefined
+        ? ''
+        : String(initialValues.totalTimeMinutes),
   }
 }
 
+function hasAdditionalDetails(values = emptyForm) {
+  return Boolean(
+    (values.imageUrl && String(values.imageUrl).trim()) ||
+      (Array.isArray(values.tagIds) && values.tagIds.length) ||
+      (values.mealType && String(values.mealType).trim()) ||
+      (values.cuisine && String(values.cuisine).trim()) ||
+      values.totalTimeMinutes,
+  )
+}
+
 export default function RecipeForm({
+  availableTags,
   mode,
   initialValues = emptyForm,
   onSubmit,
@@ -27,14 +48,37 @@ export default function RecipeForm({
   submitting,
 }) {
   const [values, setValues] = useState(() => getFormValues(initialValues))
-  const [tagInput, setTagInput] = useState('')
+  const [tagQuery, setTagQuery] = useState('')
   const [error, setError] = useState('')
+  const [showDetails, setShowDetails] = useState(() => mode === 'edit' || hasAdditionalDetails(initialValues))
+  const sectionRef = useRef(null)
 
   useEffect(() => {
     setValues(getFormValues(initialValues))
-    setTagInput('')
+    setTagQuery('')
     setError('')
-  }, [initialValues])
+    setShowDetails(mode === 'edit' || hasAdditionalDetails(initialValues))
+  }, [initialValues, mode])
+
+  useEffect(() => {
+    if (mode !== 'edit' || typeof window === 'undefined') {
+      return
+    }
+
+    if (!window.matchMedia('(max-width: 899px)').matches) {
+      return
+    }
+
+    sectionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }, [initialValues, mode])
+
+  const selectedTags = useMemo(
+    () => availableTags.filter((tag) => values.tagIds.includes(tag.id)),
+    [availableTags, values.tagIds],
+  )
 
   function updateField(event) {
     const { name, value } = event.target
@@ -44,25 +88,17 @@ export default function RecipeForm({
     }))
   }
 
-  function commitTagInput() {
-    const nextTags = normalizeTags(tagInput.split(','))
-
-    if (!nextTags.length) {
-      setTagInput('')
-      return
-    }
-
+  function addTag(tag) {
     setValues((current) => ({
       ...current,
-      tags: normalizeTags([...current.tags, ...nextTags]),
+      tagIds: current.tagIds.includes(tag.id) ? current.tagIds : [...current.tagIds, tag.id],
     }))
-    setTagInput('')
   }
 
   function removeTag(tagToRemove) {
     setValues((current) => ({
       ...current,
-      tags: current.tags.filter((tag) => tag !== tagToRemove),
+      tagIds: current.tagIds.filter((tagId) => tagId !== tagToRemove.id),
     }))
   }
 
@@ -76,22 +112,27 @@ export default function RecipeForm({
     }
 
     try {
-      await onSubmit({
-        ...values,
-        tags: normalizeTags([...values.tags, ...tagInput.split(',')]),
-      })
+      await onSubmit(values)
 
       if (mode === 'add') {
         setValues(emptyForm)
-        setTagInput('')
+        setTagQuery('')
+        setShowDetails(false)
       }
     } catch (submitError) {
       setError(submitError.message || 'Unable to save recipe.')
     }
   }
 
+  const tagEmptyMessage = availableTags.length
+    ? 'No shared tag matches this search.'
+    : 'No shared tags yet. Open the tag manager to add the first one.'
+  const tagHelperText = availableTags.length
+    ? 'Shared tags are optional. Click a selected tag to remove it.'
+    : 'No shared tags yet. Open the tag manager to add the first one.'
+
   return (
-    <section className="panel">
+    <section className="panel" ref={sectionRef}>
       <div className="panel__header">
         <div>
           <p className="eyebrow">{mode === 'add' ? 'New recipe' : 'Edit recipe'}</p>
@@ -109,22 +150,13 @@ export default function RecipeForm({
           <span>Title</span>
           <input
             autoComplete="off"
+            className="content-input"
+            dir="auto"
             name="title"
             onChange={updateField}
             placeholder="Shakshuka"
             type="text"
             value={values.title}
-          />
-        </label>
-
-        <label className="field">
-          <span>Description</span>
-          <textarea
-            name="description"
-            onChange={updateField}
-            placeholder="Simple notes for why you saved it."
-            rows="4"
-            value={values.description}
           />
         </label>
 
@@ -141,60 +173,98 @@ export default function RecipeForm({
         </label>
 
         <label className="field">
-          <span>Image URL</span>
-          <input
-            autoComplete="off"
-            name="imageUrl"
+          <span>Description</span>
+          <textarea
+            className="content-input"
+            dir="auto"
+            name="description"
             onChange={updateField}
-            placeholder="https://example.com/photo.jpg"
-            type="url"
-            value={values.imageUrl}
+            placeholder="Simple notes for why you saved it."
+            rows="4"
+            value={values.description}
           />
         </label>
 
-        <div className="field">
-          <label htmlFor="recipe-tags">
-            <span>Tags</span>
-          </label>
-          <div className="tag-editor">
-            {values.tags.length ? (
-              <div className="tag-editor__list">
-                {values.tags.map((tag) => (
-                  <button
-                    className="tag-chip tag-chip--editable"
-                    key={tag}
-                    onClick={() => removeTag(tag)}
-                    type="button"
-                  >
-                    <span>{tag}</span>
-                    <span aria-hidden="true">x</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
+        <div className="recipe-form__details">
+          <button
+            aria-expanded={showDetails}
+            className="ghost-button recipe-form__details-toggle"
+            onClick={() => setShowDetails((currentValue) => !currentValue)}
+            type="button"
+          >
+            {showDetails ? 'Hide more details' : 'More details'}
+          </button>
 
-            <div className="tag-editor__controls">
-              <input
-                autoComplete="off"
-                id="recipe-tags"
-                onBlur={commitTagInput}
-                onChange={(event) => setTagInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ',') {
-                    event.preventDefault()
-                    commitTagInput()
-                  }
-                }}
-                placeholder="vegetarian, quick dinner"
-                type="text"
-                value={tagInput}
+          {showDetails ? (
+            <div className="recipe-form__details-body">
+              <label className="field">
+                <span>Image URL</span>
+                <input
+                  autoComplete="off"
+                  name="imageUrl"
+                  onChange={updateField}
+                  placeholder="https://example.com/photo.jpg"
+                  type="url"
+                  value={values.imageUrl}
+                />
+              </label>
+
+              <div className="recipe-form__grid">
+                <label className="field">
+                  <span>Meal type</span>
+                  <select className="content-input" name="mealType" onChange={updateField} value={values.mealType}>
+                    {MEAL_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value || 'any'} value={option.value}>
+                        {option.value ? option.label : 'Choose a meal type'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Total time (minutes)</span>
+                  <input
+                    autoComplete="off"
+                    className="content-input"
+                    min="1"
+                    name="totalTimeMinutes"
+                    onChange={updateField}
+                    placeholder="30"
+                    type="number"
+                    value={values.totalTimeMinutes}
+                  />
+                </label>
+              </div>
+
+              <label className="field">
+                <span>Cuisine</span>
+                <input
+                  autoComplete="off"
+                  className="content-input"
+                  dir="auto"
+                  name="cuisine"
+                  onChange={updateField}
+                  placeholder="Middle Eastern"
+                  type="text"
+                  value={values.cuisine}
+                />
+              </label>
+
+              <ManagedTagAutocomplete
+                availableTags={availableTags}
+                emptyMessage={tagEmptyMessage}
+                helperText={tagHelperText}
+                inputId="recipe-tags"
+                label="Tags"
+                onAddTag={addTag}
+                onInputChange={setTagQuery}
+                onRemoveTag={removeTag}
+                placeholder="Search shared tags"
+                query={tagQuery}
+                selectedTags={selectedTags}
               />
-              <button className="ghost-button" onClick={commitTagInput} type="button">
-                Add tag
-              </button>
             </div>
-          </div>
-          <p className="field__hint">Press Enter or comma to add a tag. Click a tag to remove it.</p>
+          ) : null}
         </div>
 
         {error ? <p className="inline-error">{error}</p> : null}

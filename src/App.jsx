@@ -1,8 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import RecipeForm from './components/RecipeForm'
 import RecipeList from './components/RecipeList'
+import TagLibrary from './components/TagLibrary'
 import { firebaseConfigError } from './lib/firebase'
-import { appendSearchTerm, matchesRecipeSearch, normalizeUserEmail } from './lib/recipe-utils'
+import { normalizeUserEmail } from './lib/recipe-utils'
+import {
+  createEmptySearchState,
+  getActiveSearchChips,
+  getAvailableCuisines,
+  getFilteredAndSortedRecipes,
+  removeSearchTerm,
+} from './lib/search-utils'
+import { getTagUsageCounts } from './lib/tag-utils'
 import {
   allowedEmailConfigError,
   isUserAllowed,
@@ -17,6 +26,35 @@ import {
   updateRecipe,
   updateRecipeRating,
 } from './services/recipes'
+import {
+  createTag,
+  deleteTagAndRemoveFromRecipes,
+  renameTag,
+  subscribeToTags,
+  syncManagedTagsAndRecipes,
+} from './services/tags'
+
+const numericSearchFields = new Set(['maxTotalTimeMinutes', 'minimumRating'])
+const mobileLayoutMediaQuery = '(max-width: 699px)'
+
+function toggleSelectedTagIds(selectedTagIds, tagId) {
+  return selectedTagIds.includes(tagId)
+    ? selectedTagIds.filter((currentTagId) => currentTagId !== tagId)
+    : [...selectedTagIds, tagId]
+}
+
+function parseSearchFieldValue(field, value) {
+  if (!numericSearchFields.has(field)) {
+    return value
+  }
+
+  if (!value) {
+    return null
+  }
+
+  const parsedValue = Number.parseInt(value, 10)
+  return Number.isInteger(parsedValue) ? parsedValue : null
+}
 
 function SetupNotice({ title, body }) {
   return (
@@ -58,19 +96,56 @@ export default function App() {
   const [recipes, setRecipes] = useState([])
   const [recipesLoading, setRecipesLoading] = useState(true)
   const [recipesError, setRecipesError] = useState('')
+  const [tags, setTags] = useState([])
+  const [tagsLoading, setTagsLoading] = useState(true)
+  const [tagsError, setTagsError] = useState('')
   const [editingRecipe, setEditingRecipe] = useState(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchState, setSearchState] = useState(createEmptySearchState)
   const [ratingRecipeId, setRatingRecipeId] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [showTagLibrary, setShowTagLibrary] = useState(false)
+  const [isMobileLayout, setIsMobileLayout] = useState(() =>
+    typeof window === 'undefined' ? false : window.matchMedia(mobileLayoutMediaQuery).matches,
+  )
+  const [mobileSection, setMobileSection] = useState('recipes')
+  const syncingManagedTagsRef = useRef(false)
 
   const setupError = firebaseConfigError || allowedEmailConfigError
   const canSignIn = !setupError
   const currentUserEmail = normalizeUserEmail(user?.email)
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    const mediaQueryList = window.matchMedia(mobileLayoutMediaQuery)
+    const updateIsMobileLayout = (event) => {
+      setIsMobileLayout(event.matches)
+    }
+
+    setIsMobileLayout(mediaQueryList.matches)
+
+    if (typeof mediaQueryList.addEventListener === 'function') {
+      mediaQueryList.addEventListener('change', updateIsMobileLayout)
+
+      return () => {
+        mediaQueryList.removeEventListener('change', updateIsMobileLayout)
+      }
+    }
+
+    mediaQueryList.addListener(updateIsMobileLayout)
+
+    return () => {
+      mediaQueryList.removeListener(updateIsMobileLayout)
+    }
+  }, [])
+
+  useEffect(() => {
     if (firebaseConfigError) {
       setAuthReady(true)
       setRecipesLoading(false)
+      setTagsLoading(false)
       return undefined
     }
 
@@ -91,12 +166,19 @@ export default function App() {
 
       setUser(nextUser)
       setAuthReady(true)
+
       if (!nextUser) {
         setRecipes([])
         setRecipesLoading(false)
+        setRecipesError('')
+        setTags([])
+        setTagsLoading(false)
+        setTagsError('')
+        setShowTagLibrary(false)
         setEditingRecipe(null)
-        setSearchQuery('')
+        setSearchState(createEmptySearchState())
         setRatingRecipeId(null)
+        setMobileSection('recipes')
       }
     })
 
@@ -128,6 +210,69 @@ export default function App() {
     return unsubscribe
   }, [user])
 
+  useEffect(() => {
+    if (!user) {
+      return undefined
+    }
+
+    setTagsLoading(true)
+    setTagsError('')
+
+    const unsubscribe = subscribeToTags(
+      (nextTags) => {
+        setTags(nextTags)
+        setTagsLoading(false)
+      },
+      (error) => {
+        setTagsError(error.message || 'Unable to load shared tags.')
+        setTagsLoading(false)
+      },
+    )
+
+    return unsubscribe
+  }, [user])
+
+  useEffect(() => {
+    if (!user || recipesLoading || tagsLoading || !recipes.length || syncingManagedTagsRef.current) {
+      return
+    }
+
+    let cancelled = false
+    syncingManagedTagsRef.current = true
+
+    async function syncManagedTags() {
+      try {
+        await syncManagedTagsAndRecipes(recipes, tags)
+
+        if (!cancelled) {
+          setTagsError('')
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setTagsError(error.message || 'Unable to sync shared tags.')
+        }
+      } finally {
+        syncingManagedTagsRef.current = false
+      }
+    }
+
+    syncManagedTags()
+
+    return () => {
+      cancelled = true
+    }
+  }, [recipes, recipesLoading, tags, tagsLoading, user])
+
+  useEffect(() => {
+    if (!user || tagsLoading) {
+      return
+    }
+
+    if (!tags.length || tagsError) {
+      setShowTagLibrary(true)
+    }
+  }, [tags.length, tagsError, tagsLoading, user])
+
   const formInitialValues = useMemo(
     () =>
       editingRecipe
@@ -136,16 +281,31 @@ export default function App() {
             description: editingRecipe.description || '',
             sourceUrl: editingRecipe.sourceUrl || '',
             imageUrl: editingRecipe.imageUrl || '',
-            tags: editingRecipe.tags || [],
+            tagIds: editingRecipe.tagIds || [],
+            mealType: editingRecipe.mealType || '',
+            cuisine: editingRecipe.cuisine || '',
+            totalTimeMinutes: editingRecipe.totalTimeMinutes,
           }
         : undefined,
     [editingRecipe],
   )
 
-  const filteredRecipes = useMemo(
-    () => recipes.filter((recipe) => matchesRecipeSearch(recipe, searchQuery)),
-    [recipes, searchQuery],
+  const tagsById = useMemo(
+    () => Object.fromEntries(tags.map((tag) => [tag.id, tag])),
+    [tags],
   )
+
+  const filteredRecipes = useMemo(
+    () => getFilteredAndSortedRecipes(recipes, tagsById, searchState),
+    [recipes, searchState, tagsById],
+  )
+
+  const availableCuisines = useMemo(() => getAvailableCuisines(recipes), [recipes])
+  const activeSearchChips = useMemo(
+    () => getActiveSearchChips(searchState, tagsById),
+    [searchState, tagsById],
+  )
+  const tagUsageCounts = useMemo(() => getTagUsageCounts(recipes, tags), [recipes, tags])
 
   async function handleSignIn() {
     setAuthMessage('')
@@ -191,6 +351,7 @@ export default function App() {
 
     try {
       await addRecipe(values, user)
+      setMobileSection('recipes')
     } catch (error) {
       setRecipesError(error.message || 'Unable to add recipe.')
       throw error
@@ -210,6 +371,7 @@ export default function App() {
     try {
       await updateRecipe(editingRecipe.id, values)
       setEditingRecipe(null)
+      setMobileSection('recipes')
     } catch (error) {
       setRecipesError(error.message || 'Unable to update recipe.')
       throw error
@@ -229,6 +391,7 @@ export default function App() {
 
     try {
       await deleteRecipe(recipe.id)
+
       if (editingRecipe?.id === recipe.id) {
         setEditingRecipe(null)
       }
@@ -254,21 +417,136 @@ export default function App() {
     }
   }
 
-  function handleSearchChange(event) {
-    setSearchQuery(event.target.value)
+  async function handleCreateTag(name) {
+    setTagsError('')
+    await createTag(name, tags)
   }
 
-  function clearSearch() {
-    setSearchQuery('')
+  async function handleRenameTag(tagId, name) {
+    setTagsError('')
+    await renameTag(tagId, name, tags)
   }
 
-  function handleTagSearch(tag) {
-    setSearchQuery((currentQuery) => appendSearchTerm(currentQuery, tag))
+  async function handleDeleteTag(tagId) {
+    setTagsError('')
+    await deleteTagAndRemoveFromRecipes(tagId)
+    setEditingRecipe((currentRecipe) =>
+      currentRecipe
+        ? {
+            ...currentRecipe,
+            tagIds: (currentRecipe.tagIds || []).filter((currentTagId) => currentTagId !== tagId),
+          }
+        : currentRecipe,
+    )
+    setSearchState((currentSearchState) => ({
+      ...currentSearchState,
+      selectedTagIds: currentSearchState.selectedTagIds.filter((currentTagId) => currentTagId !== tagId),
+    }))
   }
 
-  function openRecipe(url) {
-    window.open(url, '_blank', 'noopener,noreferrer')
+  function handleEditRecipe(recipe) {
+    setEditingRecipe(recipe)
+    setMobileSection('recipe-form')
   }
+
+  function handleCancelRecipeEdit() {
+    setEditingRecipe(null)
+    setMobileSection('recipes')
+  }
+
+  function handleTagLibraryToggle() {
+    if (showTagLibrary) {
+      setShowTagLibrary(false)
+
+      if (mobileSection === 'admin') {
+        setMobileSection('recipes')
+      }
+
+      return
+    }
+
+    setShowTagLibrary(true)
+    setMobileSection('admin')
+  }
+
+  function handleQueryChange(event) {
+    const { value } = event.target
+
+    setSearchState((currentSearchState) => ({
+      ...currentSearchState,
+      query: value,
+    }))
+  }
+
+  function handleQueryClear() {
+    setSearchState((currentSearchState) => ({
+      ...currentSearchState,
+      query: '',
+    }))
+  }
+
+  function handleClearAllSearch() {
+    setSearchState(createEmptySearchState())
+  }
+
+  function handleSearchFieldChange(field, value) {
+    setSearchState((currentSearchState) => ({
+      ...currentSearchState,
+      [field]: parseSearchFieldValue(field, value),
+    }))
+  }
+
+  function handleSearchTagToggle(tagId) {
+    setSearchState((currentSearchState) => ({
+      ...currentSearchState,
+      selectedTagIds: toggleSelectedTagIds(currentSearchState.selectedTagIds, tagId),
+    }))
+  }
+
+  function handleSearchChipRemove(chip) {
+    if (chip.type === 'query-term') {
+      setSearchState((currentSearchState) => ({
+        ...currentSearchState,
+        query: removeSearchTerm(currentSearchState.query, chip.value),
+      }))
+      return
+    }
+
+    if (chip.type === 'tag') {
+      handleSearchTagToggle(chip.value)
+      return
+    }
+
+    if (chip.type === 'meal-type') {
+      handleSearchFieldChange('mealType', '')
+      return
+    }
+
+    if (chip.type === 'cuisine') {
+      handleSearchFieldChange('cuisine', '')
+      return
+    }
+
+    if (chip.type === 'max-time') {
+      handleSearchFieldChange('maxTotalTimeMinutes', '')
+      return
+    }
+
+    if (chip.type === 'minimum-rating') {
+      handleSearchFieldChange('minimumRating', '')
+      return
+    }
+
+    if (chip.type === 'sort') {
+      handleSearchFieldChange('sort', '')
+    }
+  }
+
+  const addSectionLabel = editingRecipe ? 'Edit' : 'Add'
+  const showAdminNavigation = showTagLibrary
+  const showRecipesSection = !isMobileLayout || mobileSection === 'recipes'
+  const showRecipeFormSection = !isMobileLayout || mobileSection === 'recipe-form'
+  const showAdminSection = !isMobileLayout || (showAdminNavigation && mobileSection === 'admin')
 
   if (!authReady) {
     return (
@@ -310,6 +588,13 @@ export default function App() {
           <div className="user-chip">
             <span>{user.displayName || user.email}</span>
           </div>
+          <button
+            className={`ghost-button${showTagLibrary ? ' ghost-button--active' : ''}`}
+            onClick={handleTagLibraryToggle}
+            type="button"
+          >
+            {showTagLibrary ? 'Close tag manager' : 'Open tag manager'}
+          </button>
           <button className="ghost-button" onClick={handleSignOut} type="button">
             Sign out
           </button>
@@ -317,33 +602,87 @@ export default function App() {
       </header>
 
       <main className="layout">
-        <div className="layout__main">
+        <nav aria-label="Sections" className="mobile-section-nav">
+          <button
+            aria-pressed={mobileSection === 'recipes'}
+            className={`ghost-button mobile-section-nav__button${mobileSection === 'recipes' ? ' ghost-button--active' : ''}`}
+            onClick={() => setMobileSection('recipes')}
+            type="button"
+          >
+            Recipes
+          </button>
+          <button
+            aria-pressed={mobileSection === 'recipe-form'}
+            className={`ghost-button mobile-section-nav__button${mobileSection === 'recipe-form' ? ' ghost-button--active' : ''}`}
+            onClick={() => setMobileSection('recipe-form')}
+            type="button"
+          >
+            {addSectionLabel}
+          </button>
+          {showAdminNavigation ? (
+            <button
+              aria-pressed={mobileSection === 'admin'}
+              className={`ghost-button mobile-section-nav__button${mobileSection === 'admin' ? ' ghost-button--active' : ''}`}
+              onClick={() => setMobileSection('admin')}
+              type="button"
+            >
+              Admin
+            </button>
+          ) : null}
+        </nav>
+
+        <div className="layout__main" hidden={!showRecipesSection}>
           {recipesError ? <p className="inline-error">{recipesError}</p> : null}
           <RecipeList
+            activeSearchChips={activeSearchChips}
+            availableCuisines={availableCuisines}
+            availableTags={tags}
             currentUserEmail={currentUserEmail}
             loading={recipesLoading}
+            onClearAllSearch={handleClearAllSearch}
             onDelete={handleDeleteRecipe}
-            onEdit={setEditingRecipe}
-            onOpen={openRecipe}
+            onEdit={handleEditRecipe}
+            onQueryChange={handleQueryChange}
+            onQueryClear={handleQueryClear}
             onRate={handleRateRecipe}
-            onSearchChange={handleSearchChange}
-            onSearchClear={clearSearch}
-            onTagClick={handleTagSearch}
+            onSearchChipRemove={handleSearchChipRemove}
+            onSearchFieldChange={handleSearchFieldChange}
+            onSearchTagToggle={handleSearchTagToggle}
             ratingRecipeId={ratingRecipeId}
             recipes={filteredRecipes}
-            searchQuery={searchQuery}
+            searchState={searchState}
+            tagsById={tagsById}
             totalRecipesCount={recipes.length}
           />
         </div>
 
-        <aside className="layout__sidebar">
-          <RecipeForm
-            initialValues={formInitialValues}
-            mode={editingRecipe ? 'edit' : 'add'}
-            onCancel={() => setEditingRecipe(null)}
-            onSubmit={editingRecipe ? handleUpdateRecipe : handleAddRecipe}
-            submitting={submitting}
-          />
+        <aside className="layout__sidebar" hidden={!showRecipeFormSection && !showAdminSection}>
+          <div className="layout__sidebar-stack">
+            {showTagLibrary ? (
+              <div hidden={!showAdminSection}>
+                <TagLibrary
+                  error={tagsError}
+                  loading={tagsLoading}
+                  onCreateTag={handleCreateTag}
+                  onDeleteTag={handleDeleteTag}
+                  onRenameTag={handleRenameTag}
+                  tags={tags}
+                  usageCounts={tagUsageCounts}
+                />
+              </div>
+            ) : null}
+
+            <div hidden={!showRecipeFormSection}>
+              <RecipeForm
+                availableTags={tags}
+                initialValues={formInitialValues}
+                mode={editingRecipe ? 'edit' : 'add'}
+                onCancel={handleCancelRecipeEdit}
+                onSubmit={editingRecipe ? handleUpdateRecipe : handleAddRecipe}
+                submitting={submitting}
+              />
+            </div>
+          </div>
         </aside>
       </main>
     </div>
