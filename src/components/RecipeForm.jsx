@@ -31,8 +31,7 @@ function getFormValues(initialValues = emptyForm) {
 
 function hasAdditionalDetails(values = emptyForm) {
   return Boolean(
-    (values.imageUrl && String(values.imageUrl).trim()) ||
-      (Array.isArray(values.tagIds) && values.tagIds.length) ||
+    (Array.isArray(values.tagIds) && values.tagIds.length) ||
       (values.mealType && String(values.mealType).trim()) ||
       (values.cuisine && String(values.cuisine).trim()) ||
       values.totalTimeMinutes,
@@ -173,6 +172,18 @@ export default function RecipeForm({
         </label>
 
         <label className="field">
+          <span>Image URL</span>
+          <input
+            autoComplete="off"
+            name="imageUrl"
+            onChange={updateField}
+            placeholder="https://example.com/photo.jpg"
+            type="url"
+            value={values.imageUrl}
+          />
+        </label>
+
+        <label className="field">
           <span>Description</span>
           <textarea
             className="content-input"
@@ -197,18 +208,6 @@ export default function RecipeForm({
 
           {showDetails ? (
             <div className="recipe-form__details-body">
-              <label className="field">
-                <span>Image URL</span>
-                <input
-                  autoComplete="off"
-                  name="imageUrl"
-                  onChange={updateField}
-                  placeholder="https://example.com/photo.jpg"
-                  type="url"
-                  value={values.imageUrl}
-                />
-              </label>
-
               <div className="recipe-form__grid">
                 <label className="field">
                   <span>Meal type</span>
