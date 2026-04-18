@@ -19,6 +19,15 @@ export function normalizeTextInput(value = '') {
   return String(value).trim().replace(/\s+/g, ' ')
 }
 
+export function normalizeMultilineTextInput(value = '') {
+  return String(value)
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trim().replace(/[^\S\n]+/g, ' '))
+    .join('\n')
+    .trim()
+}
+
 export function normalizeSearchText(value = '') {
   return normalizeTextInput(value)
     .toLowerCase()
@@ -94,6 +103,11 @@ export function normalizeRating(value) {
   return rating
 }
 
+export function normalizeCommentCount(value) {
+  const commentCount = Number.parseInt(value, 10)
+  return Number.isInteger(commentCount) && commentCount >= 0 ? commentCount : 0
+}
+
 export function normalizeRatings(ratings) {
   if (!ratings || typeof ratings !== 'object') {
     return {}
@@ -112,6 +126,15 @@ export function normalizeRatings(ratings) {
   }, {})
 }
 
+export function normalizeComment(comment = {}) {
+  return {
+    ...comment,
+    text: normalizeMultilineTextInput(comment.text),
+    authorEmail: normalizeUserEmail(comment.authorEmail),
+    authorName: normalizeTextInput(comment.authorName),
+  }
+}
+
 export function normalizeRecipe(recipe = {}) {
   return {
     ...recipe,
@@ -125,6 +148,7 @@ export function normalizeRecipe(recipe = {}) {
     mealType: normalizeMealType(recipe.mealType),
     cuisine: normalizeTextInput(recipe.cuisine),
     totalTimeMinutes: normalizeTotalTimeMinutes(recipe.totalTimeMinutes),
+    commentCount: normalizeCommentCount(recipe.commentCount),
     ratings: normalizeRatings(recipe.ratings),
   }
 }

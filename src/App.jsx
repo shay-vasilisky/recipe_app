@@ -637,6 +637,7 @@ export default function App() {
             activeSearchChips={activeSearchChips}
             availableCuisines={availableCuisines}
             availableTags={tags}
+            currentUser={user}
             currentUserEmail={currentUserEmail}
             loading={recipesLoading}
             onClearAllSearch={handleClearAllSearch}

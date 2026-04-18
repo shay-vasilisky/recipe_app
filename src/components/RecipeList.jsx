@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import ManagedTagAutocomplete from './ManagedTagAutocomplete'
+import RecipeComments from './RecipeComments'
 import {
   MAX_TOTAL_TIME_OPTIONS,
   MINIMUM_RATING_OPTIONS,
@@ -208,6 +209,7 @@ export default function RecipeList({
   activeSearchChips,
   availableCuisines,
   availableTags,
+  currentUser,
   currentUserEmail,
   loading,
   onClearAllSearch,
@@ -296,7 +298,7 @@ export default function RecipeList({
                   dir="auto"
                   id="recipe-search"
                   onChange={onQueryChange}
-                  placeholder="Search titles, notes, tags, or links"
+                  placeholder="Search titles, descriptions, tags, or links"
                   type="search"
                   value={searchState.query}
                 />
@@ -455,6 +457,9 @@ export default function RecipeList({
             const sourceHost = getRecipeSourceHost(recipe.sourceUrl)
             const description = recipe.description || 'No description added.'
             const recipeTags = getResolvedRecipeTags(recipe, tagsById)
+            const hasSummaryDetails = Boolean(
+              recipeTags.length || recipe.mealType || recipe.cuisine || recipe.totalTimeMinutes,
+            )
 
             return (
               <article className="recipe-card" key={recipe.id}>
@@ -479,36 +484,46 @@ export default function RecipeList({
                     </p>
                   </div>
 
-                  <RecipeAttributes recipe={recipe} />
-                  <RecipeTags
-                    activeTagIds={searchState.selectedTagIds}
-                    onTagClick={onSearchTagToggle}
-                    recipeTags={recipeTags}
-                  />
+                  {hasSummaryDetails ? (
+                    <div className="recipe-card__summary">
+                      <RecipeAttributes recipe={recipe} />
+                      <RecipeTags
+                        activeTagIds={searchState.selectedTagIds}
+                        onTagClick={onSearchTagToggle}
+                        recipeTags={recipeTags}
+                      />
+                    </div>
+                  ) : null}
 
-                  <RecipeRating
-                    currentUserEmail={currentUserEmail}
-                    isSaving={ratingRecipeId === recipe.id}
-                    onRate={onRate}
-                    recipe={recipe}
-                  />
+                  <div className="recipe-card__utility-row">
+                    <RecipeRating
+                      currentUserEmail={currentUserEmail}
+                      isSaving={ratingRecipeId === recipe.id}
+                      onRate={onRate}
+                      recipe={recipe}
+                    />
 
-                  <div className="recipe-card__meta">
-                    <p className="recipe-card__date">{formatTimestamp(recipe.updatedAt)}</p>
-                    <p className="recipe-card__added-by">{recipe.createdBy || 'Shared recipe'}</p>
+                    <RecipeComments currentUser={currentUser} recipe={recipe} />
                   </div>
 
                   <div className="recipe-card__footer">
-                    <a
-                      className="text-link"
-                      href={recipe.sourceUrl}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Open recipe
-                    </a>
+                    <div className="recipe-card__meta">
+                      <p className="recipe-card__date">{formatTimestamp(recipe.updatedAt)}</p>
+                      <p className="recipe-card__added-by">{recipe.createdBy || 'Shared recipe'}</p>
+                    </div>
 
-                    <RecipeActionMenu onDelete={onDelete} onEdit={onEdit} recipe={recipe} />
+                    <div className="recipe-card__actions">
+                      <a
+                        className="text-link"
+                        href={recipe.sourceUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Open recipe
+                      </a>
+
+                      <RecipeActionMenu onDelete={onDelete} onEdit={onEdit} recipe={recipe} />
+                    </div>
                   </div>
                 </div>
               </article>

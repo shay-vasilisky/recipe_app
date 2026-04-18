@@ -12,6 +12,17 @@ service cloud.firestore {
 
     match /recipes/{recipeId} {
       allow read, write: if isAllowedEmail();
+
+      match /comments/{commentId} {
+        allow read: if isAllowedEmail();
+        allow create: if isAllowedEmail()
+          && request.resource.data.authorEmail == request.auth.token.email;
+        allow update: if isAllowedEmail()
+          && resource.data.authorEmail == request.auth.token.email
+          && request.resource.data.authorEmail == resource.data.authorEmail;
+        allow delete: if isAllowedEmail()
+          && resource.data.authorEmail == request.auth.token.email;
+      }
     }
 
     match /tags/{tagId} {

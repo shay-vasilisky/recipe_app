@@ -190,7 +190,7 @@ export default function RecipeForm({
             dir="auto"
             name="description"
             onChange={updateField}
-            placeholder="Simple notes for why you saved it."
+            placeholder="Short summary for why you saved it."
             rows="4"
             value={values.description}
           />
