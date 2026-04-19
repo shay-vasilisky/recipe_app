@@ -168,123 +168,40 @@ function RecipeAttributes({ recipe }) {
   )
 }
 
-function RecipeActions({ onDelete, onEdit, recipe }) {
+function RecipeActionMenu({ onDelete, onEdit, recipe }) {
+  function closeMenu(event) {
+    event.currentTarget.closest('details')?.removeAttribute('open')
+  }
+
+  function handleEditClick(event) {
+    closeMenu(event)
+    onEdit(recipe)
+  }
+
+  function handleDeleteClick(event) {
+    closeMenu(event)
+    onDelete(recipe)
+  }
+
   return (
-    <>
-      <button className="recipe-card__action" onClick={() => onEdit(recipe)} type="button">
-        Edit
-      </button>
-      <button className="recipe-card__action recipe-card__action--danger" onClick={() => onDelete(recipe)} type="button">
-        Delete
-      </button>
-    </>
-  )
-}
+    <details className="recipe-card__menu">
+      <summary aria-label={`More actions for ${recipe.title}`} className="ghost-button recipe-card__menu-trigger">
+        More
+      </summary>
 
-function RecipeSearchFilters({
-  availableCuisines,
-  availableTags,
-  effectiveSort,
-  onSearchFieldChange,
-  onSearchTagToggle,
-  searchState,
-  selectedSearchTags,
-  setTagFilterQuery,
-  tagFilterQuery,
-}) {
-  return (
-    <div className="recipe-search__filters">
-      <ManagedTagAutocomplete
-        availableTags={availableTags}
-        emptyMessage="No shared tag matches this search."
-        inputId="recipe-tag-filter"
-        label="Tags"
-        onAddTag={(tag) => onSearchTagToggle(tag.id)}
-        onInputChange={setTagFilterQuery}
-        onRemoveTag={(tag) => onSearchTagToggle(tag.id)}
-        placeholder="Filter by tag"
-        query={tagFilterQuery}
-        selectedTags={selectedSearchTags}
-      />
-
-      <label className="field">
-        <span>Meal type</span>
-        <select
-          className="content-input"
-          onChange={(event) => onSearchFieldChange('mealType', event.target.value)}
-          value={searchState.mealType}
+      <div className="recipe-card__menu-popover">
+        <button className="ghost-button recipe-card__menu-action" onClick={handleEditClick} type="button">
+          Edit
+        </button>
+        <button
+          className="ghost-button ghost-button--danger recipe-card__menu-action"
+          onClick={handleDeleteClick}
+          type="button"
         >
-          {MEAL_TYPE_OPTIONS.map((option) => (
-            <option key={option.value || 'any'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="field">
-        <span>Cuisine</span>
-        <select
-          className="content-input"
-          onChange={(event) => onSearchFieldChange('cuisine', event.target.value)}
-          value={searchState.cuisine}
-        >
-          <option value="">Any cuisine</option>
-          {availableCuisines.map((cuisine) => (
-            <option key={cuisine} value={cuisine}>
-              {cuisine}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="field">
-        <span>Max time</span>
-        <select
-          className="content-input"
-          onChange={(event) => onSearchFieldChange('maxTotalTimeMinutes', event.target.value)}
-          value={searchState.maxTotalTimeMinutes || ''}
-        >
-          <option value="">Any time</option>
-          {MAX_TOTAL_TIME_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="field">
-        <span>Min rating</span>
-        <select
-          className="content-input"
-          onChange={(event) => onSearchFieldChange('minimumRating', event.target.value)}
-          value={searchState.minimumRating || ''}
-        >
-          <option value="">Any rating</option>
-          {MINIMUM_RATING_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="field">
-        <span>Sort</span>
-        <select
-          className="content-input"
-          onChange={(event) => onSearchFieldChange('sort', event.target.value)}
-          value={effectiveSort}
-        >
-          {SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-    </div>
+          Delete
+        </button>
+      </div>
+    </details>
   )
 }
 
@@ -294,7 +211,6 @@ export default function RecipeList({
   availableTags,
   currentUser,
   currentUserEmail,
-  isMobileLayout,
   loading,
   onClearAllSearch,
   onDelete,
@@ -325,61 +241,21 @@ export default function RecipeList({
     [activeSearchChips],
   )
   const hasStructuredFilters = appliedFilterChips.length > 0
-  const filterButtonLabel = hasStructuredFilters ? `Filters (${appliedFilterChips.length})` : 'Filters'
 
   useEffect(() => {
-    if (!isMobileLayout && hasStructuredFilters) {
+    if (hasStructuredFilters) {
       setShowFilters(true)
     }
-  }, [hasStructuredFilters, isMobileLayout])
-
-  useEffect(() => {
-    if (isMobileLayout) {
-      setShowFilters(false)
-    }
-  }, [isMobileLayout])
-
-  useEffect(() => {
-    if (!isMobileLayout || !showFilters || typeof document === 'undefined') {
-      return undefined
-    }
-
-    const previousOverflow = document.body.style.overflow
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setShowFilters(false)
-      }
-    }
-
-    document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isMobileLayout, showFilters])
+  }, [hasStructuredFilters])
 
   function handleClearAllClick() {
-    if (!isMobileLayout) {
-      setShowFilters(false)
-    }
-
+    setShowFilters(false)
     setTagFilterQuery('')
     onClearAllSearch()
   }
 
   function handleClearSearchClick() {
     onQueryClear()
-  }
-
-  function handleFiltersButtonClick() {
-    if (isMobileLayout) {
-      setShowFilters(true)
-      return
-    }
-
-    setShowFilters((currentValue) => !currentValue)
   }
 
   if (loading) {
@@ -411,104 +287,144 @@ export default function RecipeList({
       </div>
 
       {hasRecipes ? (
-        <div className="recipe-search">
-          <div className="recipe-search__bar">
-            <label className="recipe-search__field" htmlFor="recipe-search">
-              <span>Search recipes</span>
-              <input
-                autoComplete="off"
-                className="content-input"
-                dir="auto"
-                enterKeyHint="search"
-                id="recipe-search"
-                onChange={onQueryChange}
-                placeholder="Search recipes, tags, or links"
-                type="search"
-                value={searchState.query}
-              />
-            </label>
-
-            <div className="recipe-search__controls">
-              <button
-                className={`ghost-button${showFilters || hasStructuredFilters ? ' ghost-button--active' : ''}`}
-                onClick={handleFiltersButtonClick}
-                type="button"
-              >
-                {filterButtonLabel}
-              </button>
-
-              {trimmedSearchQuery ? (
-                <button className="ghost-button" onClick={handleClearSearchClick} type="button">
-                  Clear search
-                </button>
-              ) : null}
-
-              {!isMobileLayout && hasStructuredFilters ? (
-                <button className="ghost-button" onClick={handleClearAllClick} type="button">
-                  Clear all
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          {!isMobileLayout && showFilters ? (
-            <RecipeSearchFilters
-              availableCuisines={availableCuisines}
-              availableTags={availableTags}
-              effectiveSort={effectiveSort}
-              onSearchFieldChange={onSearchFieldChange}
-              onSearchTagToggle={onSearchTagToggle}
-              searchState={searchState}
-              selectedSearchTags={selectedSearchTags}
-              setTagFilterQuery={setTagFilterQuery}
-              tagFilterQuery={tagFilterQuery}
-            />
-          ) : null}
-
-          {hasStructuredFilters ? (
-            <ActiveSearchChips chips={appliedFilterChips} onRemove={onSearchChipRemove} />
-          ) : null}
-        </div>
-      ) : null}
-
-      {isMobileLayout && showFilters ? (
         <>
-          <button
-            aria-label="Close filters"
-            className="recipe-filter-sheet__backdrop"
-            onClick={() => setShowFilters(false)}
-            type="button"
-          />
-          <div aria-labelledby="recipe-filter-sheet-title" aria-modal="true" className="recipe-filter-sheet" role="dialog">
-            <div className="recipe-filter-sheet__header">
-              <div>
-                <p className="eyebrow">Filters</p>
-                <h3 id="recipe-filter-sheet-title">Refine recipes</h3>
-              </div>
+          <div className="recipe-search">
+            <div className="recipe-search__bar">
+              <label className="recipe-search__field" htmlFor="recipe-search">
+                <span>Search recipes</span>
+                <input
+                  autoComplete="off"
+                  className="content-input"
+                  dir="auto"
+                  id="recipe-search"
+                  onChange={onQueryChange}
+                  placeholder="Search titles, descriptions, tags, or links"
+                  type="search"
+                  value={searchState.query}
+                />
+              </label>
 
-              <div className="recipe-filter-sheet__actions">
+              <div className="recipe-search__controls">
+                <button
+                  className={`ghost-button${showFilters || hasStructuredFilters ? ' ghost-button--active' : ''}`}
+                  onClick={() => setShowFilters((currentValue) => !currentValue)}
+                  type="button"
+                >
+                  {showFilters ? 'Hide filters' : 'Filters'}
+                </button>
+
+                {trimmedSearchQuery ? (
+                  <button className="ghost-button" onClick={onQueryClear} type="button">
+                    Clear search
+                  </button>
+                ) : null}
+
                 {hasStructuredFilters ? (
                   <button className="ghost-button" onClick={handleClearAllClick} type="button">
                     Clear all
                   </button>
                 ) : null}
-                <button className="ghost-button" onClick={() => setShowFilters(false)} type="button">
-                  Done
-                </button>
               </div>
             </div>
 
-            <RecipeSearchFilters
-              availableCuisines={availableCuisines}
-              availableTags={availableTags}
-              effectiveSort={effectiveSort}
-              onSearchFieldChange={onSearchFieldChange}
-              onSearchTagToggle={onSearchTagToggle}
-              searchState={searchState}
-              selectedSearchTags={selectedSearchTags}
-              setTagFilterQuery={setTagFilterQuery}
-              tagFilterQuery={tagFilterQuery}
-            />
+            {showFilters ? (
+              <div className="recipe-search__filters">
+                <ManagedTagAutocomplete
+                  availableTags={availableTags}
+                  emptyMessage="No shared tag matches this search."
+                  inputId="recipe-tag-filter"
+                  label="Tags"
+                  onAddTag={(tag) => onSearchTagToggle(tag.id)}
+                  onInputChange={setTagFilterQuery}
+                  onRemoveTag={(tag) => onSearchTagToggle(tag.id)}
+                  placeholder="Filter by tag"
+                  query={tagFilterQuery}
+                  selectedTags={selectedSearchTags}
+                />
+
+                <label className="field">
+                  <span>Meal type</span>
+                  <select
+                    className="content-input"
+                    onChange={(event) => onSearchFieldChange('mealType', event.target.value)}
+                    value={searchState.mealType}
+                  >
+                    {MEAL_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value || 'any'} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Cuisine</span>
+                  <select
+                    className="content-input"
+                    onChange={(event) => onSearchFieldChange('cuisine', event.target.value)}
+                    value={searchState.cuisine}
+                  >
+                    <option value="">Any cuisine</option>
+                    {availableCuisines.map((cuisine) => (
+                      <option key={cuisine} value={cuisine}>
+                        {cuisine}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Max time</span>
+                  <select
+                    className="content-input"
+                    onChange={(event) => onSearchFieldChange('maxTotalTimeMinutes', event.target.value)}
+                    value={searchState.maxTotalTimeMinutes || ''}
+                  >
+                    <option value="">Any time</option>
+                    {MAX_TOTAL_TIME_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Min rating</span>
+                  <select
+                    className="content-input"
+                    onChange={(event) => onSearchFieldChange('minimumRating', event.target.value)}
+                    value={searchState.minimumRating || ''}
+                  >
+                    <option value="">Any rating</option>
+                    {MINIMUM_RATING_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Sort</span>
+                  <select
+                    className="content-input"
+                    onChange={(event) => onSearchFieldChange('sort', event.target.value)}
+                    value={effectiveSort}
+                  >
+                    {SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
+
+            {hasStructuredFilters ? (
+              <ActiveSearchChips chips={appliedFilterChips} onRemove={onSearchChipRemove} />
+            ) : null}
           </div>
         </>
       ) : null}
@@ -519,7 +435,9 @@ export default function RecipeList({
         </p>
       ) : !recipes.length ? (
         <div className="recipe-empty-results">
-          <p className="recipe-empty-results__title">No matches found</p>
+          <p className="recipe-empty-results__title">
+            No matches found
+          </p>
           <p className="recipe-empty-results__copy">
             {hasStructuredFilters
               ? 'Try a different word or clear the filters.'
@@ -596,7 +514,7 @@ export default function RecipeList({
 
                     <div className="recipe-card__actions">
                       <a
-                        className="recipe-card__action recipe-card__action--primary"
+                        className="text-link"
                         href={recipe.sourceUrl}
                         rel="noreferrer"
                         target="_blank"
@@ -604,7 +522,7 @@ export default function RecipeList({
                         Open recipe
                       </a>
 
-                      <RecipeActions onDelete={onDelete} onEdit={onEdit} recipe={recipe} />
+                      <RecipeActionMenu onDelete={onDelete} onEdit={onEdit} recipe={recipe} />
                     </div>
                   </div>
                 </div>

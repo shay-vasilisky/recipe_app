@@ -7,6 +7,7 @@ function formatUsageCount(count) {
 
 export default function TagLibrary({
   error,
+  isMobileLayout,
   loading,
   onCreateTag,
   onDeleteTag,
@@ -80,7 +81,7 @@ export default function TagLibrary({
   }
 
   return (
-    <section className="panel">
+    <section className={`panel tag-library${isMobileLayout ? ' tag-library--mobile' : ''}`}>
       <div className="panel__header">
         <div>
           <p className="eyebrow">Admin Tool</p>

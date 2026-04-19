@@ -31,7 +31,9 @@ function getFormValues(initialValues = emptyForm) {
 
 function hasAdditionalDetails(values = emptyForm) {
   return Boolean(
-    (Array.isArray(values.tagIds) && values.tagIds.length) ||
+    (values.description && String(values.description).trim()) ||
+      (values.imageUrl && String(values.imageUrl).trim()) ||
+      (Array.isArray(values.tagIds) && values.tagIds.length) ||
       (values.mealType && String(values.mealType).trim()) ||
       (values.cuisine && String(values.cuisine).trim()) ||
       values.totalTimeMinutes,
@@ -40,10 +42,11 @@ function hasAdditionalDetails(values = emptyForm) {
 
 export default function RecipeForm({
   availableTags,
-  mode,
   initialValues = emptyForm,
-  onSubmit,
+  isMobileLayout,
+  mode,
   onCancel,
+  onSubmit,
   submitting,
 }) {
   const [values, setValues] = useState(() => getFormValues(initialValues))
@@ -60,11 +63,7 @@ export default function RecipeForm({
   }, [initialValues, mode])
 
   useEffect(() => {
-    if (mode !== 'edit' || typeof window === 'undefined') {
-      return
-    }
-
-    if (!window.matchMedia('(max-width: 899px)').matches) {
+    if (mode !== 'edit' || !isMobileLayout || typeof window === 'undefined') {
       return
     }
 
@@ -72,12 +71,22 @@ export default function RecipeForm({
       behavior: 'smooth',
       block: 'start',
     })
-  }, [initialValues, mode])
+  }, [initialValues, isMobileLayout, mode])
 
   const selectedTags = useMemo(
     () => availableTags.filter((tag) => values.tagIds.includes(tag.id)),
     [availableTags, values.tagIds],
   )
+
+  const isMobileQuickAdd = isMobileLayout && mode === 'add'
+  const showExpandedEditLayout = isMobileLayout && mode === 'edit'
+  const tagEmptyMessage = availableTags.length
+    ? 'No shared tag matches this search.'
+    : 'No shared tags yet. Open the tag manager to add the first one.'
+  const tagHelperText = availableTags.length
+    ? 'Shared tags are optional. Click a selected tag to remove it.'
+    : 'No shared tags yet. Open the tag manager to add the first one.'
+  const submitLabel = mode === 'add' ? 'Add recipe' : 'Save changes'
 
   function updateField(event) {
     const { name, value } = event.target
@@ -123,21 +132,105 @@ export default function RecipeForm({
     }
   }
 
-  const tagEmptyMessage = availableTags.length
-    ? 'No shared tag matches this search.'
-    : 'No shared tags yet. Open the tag manager to add the first one.'
-  const tagHelperText = availableTags.length
-    ? 'Shared tags are optional. Click a selected tag to remove it.'
-    : 'No shared tags yet. Open the tag manager to add the first one.'
+  const summaryFields = (
+    <>
+      <label className="field">
+        <span>Description</span>
+        <textarea
+          className="content-input"
+          dir="auto"
+          name="description"
+          onChange={updateField}
+          placeholder="Short summary for why you saved it."
+          rows="4"
+          value={values.description}
+        />
+      </label>
+
+      <label className="field">
+        <span>Image URL</span>
+        <input
+          autoComplete="off"
+          className="content-input"
+          inputMode="url"
+          name="imageUrl"
+          onChange={updateField}
+          placeholder="https://example.com/photo.jpg"
+          type="url"
+          value={values.imageUrl}
+        />
+      </label>
+    </>
+  )
+
+  const detailFields = (
+    <>
+      <div className="recipe-form__grid">
+        <label className="field">
+          <span>Meal type</span>
+          <select className="content-input" name="mealType" onChange={updateField} value={values.mealType}>
+            {MEAL_TYPE_OPTIONS.map((option) => (
+              <option key={option.value || 'any'} value={option.value}>
+                {option.value ? option.label : 'Choose a meal type'}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>Total time (minutes)</span>
+          <input
+            autoComplete="off"
+            className="content-input"
+            inputMode="numeric"
+            min="1"
+            name="totalTimeMinutes"
+            onChange={updateField}
+            placeholder="30"
+            type="number"
+            value={values.totalTimeMinutes}
+          />
+        </label>
+      </div>
+
+      <label className="field">
+        <span>Cuisine</span>
+        <input
+          autoComplete="off"
+          className="content-input"
+          dir="auto"
+          name="cuisine"
+          onChange={updateField}
+          placeholder="Middle Eastern"
+          type="text"
+          value={values.cuisine}
+        />
+      </label>
+
+      <ManagedTagAutocomplete
+        availableTags={availableTags}
+        emptyMessage={tagEmptyMessage}
+        helperText={tagHelperText}
+        inputId="recipe-tags"
+        label="Tags"
+        onAddTag={addTag}
+        onInputChange={setTagQuery}
+        onRemoveTag={removeTag}
+        placeholder="Search shared tags"
+        query={tagQuery}
+        selectedTags={selectedTags}
+      />
+    </>
+  )
 
   return (
-    <section className="panel" ref={sectionRef}>
+    <section className={`panel${isMobileLayout ? ' panel--mobile-form' : ''}`} ref={sectionRef}>
       <div className="panel__header">
         <div>
           <p className="eyebrow">{mode === 'add' ? 'New recipe' : 'Edit recipe'}</p>
           <h2>{mode === 'add' ? 'Add a recipe' : 'Update recipe'}</h2>
         </div>
-        {mode === 'edit' ? (
+        {mode === 'edit' && !isMobileLayout ? (
           <button className="ghost-button" type="button" onClick={onCancel}>
             Cancel
           </button>
@@ -151,6 +244,7 @@ export default function RecipeForm({
             autoComplete="off"
             className="content-input"
             dir="auto"
+            enterKeyHint={isMobileLayout ? 'next' : undefined}
             name="title"
             onChange={updateField}
             placeholder="Shakshuka"
@@ -163,6 +257,9 @@ export default function RecipeForm({
           <span>Source URL</span>
           <input
             autoComplete="off"
+            className="content-input"
+            enterKeyHint={isMobileLayout ? 'done' : undefined}
+            inputMode="url"
             name="sourceUrl"
             onChange={updateField}
             placeholder="https://example.com/recipe"
@@ -171,106 +268,59 @@ export default function RecipeForm({
           />
         </label>
 
-        <label className="field">
-          <span>Image URL</span>
-          <input
-            autoComplete="off"
-            name="imageUrl"
-            onChange={updateField}
-            placeholder="https://example.com/photo.jpg"
-            type="url"
-            value={values.imageUrl}
-          />
-        </label>
+        {isMobileQuickAdd ? (
+          <div className="recipe-form__details">
+            <button
+              aria-expanded={showDetails}
+              className="ghost-button recipe-form__details-toggle"
+              onClick={() => setShowDetails((currentValue) => !currentValue)}
+              type="button"
+            >
+              {showDetails ? 'Hide more details' : 'More details'}
+            </button>
 
-        <label className="field">
-          <span>Description</span>
-          <textarea
-            className="content-input"
-            dir="auto"
-            name="description"
-            onChange={updateField}
-            placeholder="Short summary for why you saved it."
-            rows="4"
-            value={values.description}
-          />
-        </label>
-
-        <div className="recipe-form__details">
-          <button
-            aria-expanded={showDetails}
-            className="ghost-button recipe-form__details-toggle"
-            onClick={() => setShowDetails((currentValue) => !currentValue)}
-            type="button"
-          >
-            {showDetails ? 'Hide more details' : 'More details'}
-          </button>
-
-          {showDetails ? (
-            <div className="recipe-form__details-body">
-              <div className="recipe-form__grid">
-                <label className="field">
-                  <span>Meal type</span>
-                  <select className="content-input" name="mealType" onChange={updateField} value={values.mealType}>
-                    {MEAL_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value || 'any'} value={option.value}>
-                        {option.value ? option.label : 'Choose a meal type'}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="field">
-                  <span>Total time (minutes)</span>
-                  <input
-                    autoComplete="off"
-                    className="content-input"
-                    min="1"
-                    name="totalTimeMinutes"
-                    onChange={updateField}
-                    placeholder="30"
-                    type="number"
-                    value={values.totalTimeMinutes}
-                  />
-                </label>
+            {showDetails ? (
+              <div className="recipe-form__details-body">
+                {summaryFields}
+                {detailFields}
               </div>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            {summaryFields}
 
-              <label className="field">
-                <span>Cuisine</span>
-                <input
-                  autoComplete="off"
-                  className="content-input"
-                  dir="auto"
-                  name="cuisine"
-                  onChange={updateField}
-                  placeholder="Middle Eastern"
-                  type="text"
-                  value={values.cuisine}
-                />
-              </label>
+            {showExpandedEditLayout ? (
+              <div className="recipe-form__details-body">{detailFields}</div>
+            ) : (
+              <div className="recipe-form__details">
+                <button
+                  aria-expanded={showDetails}
+                  className="ghost-button recipe-form__details-toggle"
+                  onClick={() => setShowDetails((currentValue) => !currentValue)}
+                  type="button"
+                >
+                  {showDetails ? 'Hide more details' : 'More details'}
+                </button>
 
-              <ManagedTagAutocomplete
-                availableTags={availableTags}
-                emptyMessage={tagEmptyMessage}
-                helperText={tagHelperText}
-                inputId="recipe-tags"
-                label="Tags"
-                onAddTag={addTag}
-                onInputChange={setTagQuery}
-                onRemoveTag={removeTag}
-                placeholder="Search shared tags"
-                query={tagQuery}
-                selectedTags={selectedTags}
-              />
-            </div>
-          ) : null}
-        </div>
+                {showDetails ? <div className="recipe-form__details-body">{detailFields}</div> : null}
+              </div>
+            )}
+          </>
+        )}
 
         {error ? <p className="inline-error">{error}</p> : null}
 
-        <button className="primary-button" disabled={submitting} type="submit">
-          {submitting ? 'Saving…' : mode === 'add' ? 'Add recipe' : 'Save changes'}
-        </button>
+        <div className={`recipe-form__actions${isMobileLayout ? ' recipe-form__actions--sticky' : ''}`}>
+          {mode === 'edit' && isMobileLayout ? (
+            <button className="ghost-button" disabled={submitting} onClick={onCancel} type="button">
+              Cancel
+            </button>
+          ) : null}
+          <button className="primary-button" disabled={submitting} type="submit">
+            {submitting ? 'Saving…' : submitLabel}
+          </button>
+        </div>
       </form>
     </section>
   )

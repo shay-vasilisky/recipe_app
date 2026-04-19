@@ -543,10 +543,10 @@ export default function App() {
   }
 
   const addSectionLabel = editingRecipe ? 'Edit' : 'Add'
-  const showAdminNavigation = showTagLibrary
   const showRecipesSection = !isMobileLayout || mobileSection === 'recipes'
   const showRecipeFormSection = !isMobileLayout || mobileSection === 'recipe-form'
-  const showAdminSection = !isMobileLayout || (showAdminNavigation && mobileSection === 'admin')
+  const shouldRenderTagLibrary = isMobileLayout || showTagLibrary
+  const showAdminSection = !isMobileLayout ? showTagLibrary : mobileSection === 'admin'
 
   if (!authReady) {
     return (
@@ -577,9 +577,9 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isMobileLayout ? ' app-shell--mobile' : ''}`}>
       <header className="topbar">
-        <div>
+        <div className="topbar__branding">
           <p className="eyebrow">Shared cookbook</p>
           <h1>Recipe App</h1>
         </div>
@@ -588,49 +588,22 @@ export default function App() {
           <div className="user-chip">
             <span>{user.displayName || user.email}</span>
           </div>
-          <button
-            className={`ghost-button${showTagLibrary ? ' ghost-button--active' : ''}`}
-            onClick={handleTagLibraryToggle}
-            type="button"
-          >
-            {showTagLibrary ? 'Close tag manager' : 'Open tag manager'}
-          </button>
-          <button className="ghost-button" onClick={handleSignOut} type="button">
+          {!isMobileLayout ? (
+            <button
+              className={`ghost-button${showTagLibrary ? ' ghost-button--active' : ''}`}
+              onClick={handleTagLibraryToggle}
+              type="button"
+            >
+              {showTagLibrary ? 'Close tag manager' : 'Open tag manager'}
+            </button>
+          ) : null}
+          <button className="ghost-button topbar__signout" onClick={handleSignOut} type="button">
             Sign out
           </button>
         </div>
       </header>
 
       <main className="layout">
-        <nav aria-label="Sections" className="mobile-section-nav">
-          <button
-            aria-pressed={mobileSection === 'recipes'}
-            className={`ghost-button mobile-section-nav__button${mobileSection === 'recipes' ? ' ghost-button--active' : ''}`}
-            onClick={() => setMobileSection('recipes')}
-            type="button"
-          >
-            Recipes
-          </button>
-          <button
-            aria-pressed={mobileSection === 'recipe-form'}
-            className={`ghost-button mobile-section-nav__button${mobileSection === 'recipe-form' ? ' ghost-button--active' : ''}`}
-            onClick={() => setMobileSection('recipe-form')}
-            type="button"
-          >
-            {addSectionLabel}
-          </button>
-          {showAdminNavigation ? (
-            <button
-              aria-pressed={mobileSection === 'admin'}
-              className={`ghost-button mobile-section-nav__button${mobileSection === 'admin' ? ' ghost-button--active' : ''}`}
-              onClick={() => setMobileSection('admin')}
-              type="button"
-            >
-              Admin
-            </button>
-          ) : null}
-        </nav>
-
         <div className="layout__main" hidden={!showRecipesSection}>
           {recipesError ? <p className="inline-error">{recipesError}</p> : null}
           <RecipeList
@@ -639,6 +612,7 @@ export default function App() {
             availableTags={tags}
             currentUser={user}
             currentUserEmail={currentUserEmail}
+            isMobileLayout={isMobileLayout}
             loading={recipesLoading}
             onClearAllSearch={handleClearAllSearch}
             onDelete={handleDeleteRecipe}
@@ -659,10 +633,11 @@ export default function App() {
 
         <aside className="layout__sidebar" hidden={!showRecipeFormSection && !showAdminSection}>
           <div className="layout__sidebar-stack">
-            {showTagLibrary ? (
+            {shouldRenderTagLibrary ? (
               <div hidden={!showAdminSection}>
                 <TagLibrary
                   error={tagsError}
+                  isMobileLayout={isMobileLayout}
                   loading={tagsLoading}
                   onCreateTag={handleCreateTag}
                   onDeleteTag={handleDeleteTag}
@@ -677,6 +652,7 @@ export default function App() {
               <RecipeForm
                 availableTags={tags}
                 initialValues={formInitialValues}
+                isMobileLayout={isMobileLayout}
                 mode={editingRecipe ? 'edit' : 'add'}
                 onCancel={handleCancelRecipeEdit}
                 onSubmit={editingRecipe ? handleUpdateRecipe : handleAddRecipe}
@@ -686,6 +662,35 @@ export default function App() {
           </div>
         </aside>
       </main>
+
+      {isMobileLayout ? (
+        <nav aria-label="Sections" className="mobile-tabbar">
+          <button
+            aria-pressed={mobileSection === 'recipes'}
+            className={`mobile-tabbar__button${mobileSection === 'recipes' ? ' mobile-tabbar__button--active' : ''}`}
+            onClick={() => setMobileSection('recipes')}
+            type="button"
+          >
+            Recipes
+          </button>
+          <button
+            aria-pressed={mobileSection === 'recipe-form'}
+            className={`mobile-tabbar__button${mobileSection === 'recipe-form' ? ' mobile-tabbar__button--active' : ''}`}
+            onClick={() => setMobileSection('recipe-form')}
+            type="button"
+          >
+            {addSectionLabel}
+          </button>
+          <button
+            aria-pressed={mobileSection === 'admin'}
+            className={`mobile-tabbar__button${mobileSection === 'admin' ? ' mobile-tabbar__button--active' : ''}`}
+            onClick={() => setMobileSection('admin')}
+            type="button"
+          >
+            Tags
+          </button>
+        </nav>
+      ) : null}
     </div>
   )
 }
